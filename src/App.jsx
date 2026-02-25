@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import HandTracker from './components/HandTracker'
-import GestureDragDrop from './components/GestureDragDrop'
+import GestureTetris from './components/GestureTetris'
 
 function App() {
-  const [view, setView] = useState('gestures') // Defaulting to gestures for the new feature
+  const [view, setView] = useState('tetris')
 
   return (
     <div className="App">
@@ -22,14 +22,14 @@ function App() {
           Presence Tracker
         </button>
         <button
-          onClick={() => setView('gestures')}
-          style={buttonStyle(view === 'gestures')}
+          onClick={() => setView('tetris')}
+          style={buttonStyle(view === 'tetris')}
         >
-          Gesture Drag & Drop
+          Gesture Tetris
         </button>
       </div>
 
-      {view === 'tracker' ? <HandTracker /> : <GestureDragDrop />}
+      {view === 'tracker' ? <HandTracker /> : <GestureTetris />}
     </div>
   )
 }
@@ -37,15 +37,17 @@ function App() {
 const buttonStyle = (isActive) => ({
   padding: '10px 20px',
   borderRadius: '12px',
-  border: 'none',
-  backgroundColor: isActive ? '#3498db' : 'rgba(255, 255, 255, 0.1)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  backgroundColor: isActive ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.4)',
   color: 'white',
   cursor: 'pointer',
-  backdropFilter: 'blur(5px)',
-  fontSize: '0.9rem',
+  backdropFilter: 'blur(10px)',
+  fontSize: '0.8rem',
   fontWeight: '600',
   transition: 'all 0.3s ease',
-  boxShadow: isActive ? '0 5px 15px rgba(52, 152, 219, 0.4)' : 'none'
+  boxShadow: isActive ? '0 10px 20px rgba(0,0,0,0.2)' : 'none',
+  letterSpacing: '1px',
+  textTransform: 'uppercase'
 })
 
 export default App

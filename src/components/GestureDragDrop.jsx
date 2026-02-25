@@ -4,26 +4,35 @@ const GestureDragDrop = () => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
-    const [modelLoaded, setModelLoaded] = useState(false);
-    const [isPinched, setIsPinched] = useState(false);
-    const [hoveredId, setHoveredId] = useState(null);
 
-    // Refs for tracking drag state without triggering re-renders for every pixel move
+    const [modelLoaded, setModelLoaded] = useState(false);
+
+    // Constants for Stability
+    const GRAB_START = 0.08;
+    const GRAB_END = 0.12;
+    const FRAME_HOLD_THRESHOLD = 3;
+    const SMOOTHING = 0.8; // Factor between 0.7-0.85
+
+    // State Refs (Avoiding React State for per-frame updates)
+    const stateRef = useRef({
+        isPinched: false,
+        activeObjectId: null,
+        dragOffset: { x: 0, y: 0 },
+        grabFrameCount: 0,
+        releaseFrameCount: 0,
+        smoothedX: 0,
+        smoothedY: 0,
+        hoveredId: null
+    });
+
     const objectsRef = useRef([
-        { id: 1, x: 100, y: 100, color: '#FF6B6B', width: 150, height: 150, label: 'DRAG ME' },
-        { id: 2, x: 300, y: 150, color: '#4ECDC4', width: 150, height: 150, label: 'GRAB ME' },
-        { id: 3, x: 500, y: 200, color: '#FFE66D', width: 150, height: 150, label: 'HOLD ME' },
+        { id: 1, x: 150, y: 150, color: '#FF6B6B', width: 160, height: 160, label: 'DRAG ME' },
+        { id: 2, x: 400, y: 200, color: '#4ECDC4', width: 160, height: 160, label: 'STABLE GRAB' },
+        { id: 3, x: 650, y: 250, color: '#FFE66D', width: 160, height: 160, label: 'PRECISION' },
     ]);
 
-    const activeObjectId = useRef(null);
-    const dragOffset = useRef({ x: 0, y: 0 });
-    const lastHoveredId = useRef(null);
-
     useEffect(() => {
-        if (!window.Hands || !window.Camera) {
-            console.error('MediaPipe scripts not loaded');
-            return;
-        }
+        if (!window.Hands || !window.Camera) return;
 
         const hands = new window.Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
@@ -32,138 +41,161 @@ const GestureDragDrop = () => {
         hands.setOptions({
             maxNumHands: 1,
             modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
+            minDetectionConfidence: 0.8,
+            minTrackingConfidence: 0.8
         });
+
+        const updateUI = () => {
+            if (!canvasRef.current) return;
+            // This could be used for a separate RAF loop if needed, 
+            // but we'll drive updates from onResults for latency.
+        };
 
         hands.onResults((results) => {
             if (!canvasRef.current || !videoRef.current) return;
 
             const canvasCtx = canvasRef.current.getContext('2d');
-            const { width, height } = canvasRef.current;
+            const { width: W, height: H } = canvasRef.current;
+            const state = stateRef.current;
 
-            canvasCtx.clearRect(0, 0, width, height);
+            canvasCtx.clearRect(0, 0, W, H);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
+                const thumb = landmarks[4];
+                const index = landmarks[8];
 
-                // Landmarks 4 is Thumb Tip, 8 is Index Tip
-                const thumbTip = landmarks[4];
-                const indexTip = landmarks[8];
-
-                // Calculate Euclidean distance (normalized)
+                // Calculate Distance
                 const distance = Math.sqrt(
-                    Math.pow(thumbTip.x - indexTip.x, 2) +
-                    Math.pow(thumbTip.y - indexTip.y, 2)
+                    Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2)
                 );
 
-                // Convert normalized to pixel coordinates (inverted X for mirror)
-                const cursorX = (1 - indexTip.x) * width;
-                const cursorY = indexTip.y * height;
+                // Calculate Target Position (Mirrored for UI)
+                const targetX = (1 - index.x) * W;
+                const targetY = index.y * H;
 
-                // 1. Collision Detection & Hover State
-                let currentlyHovered = null;
-                if (!activeObjectId.current) {
-                    const obj = objectsRef.current.find(o =>
-                        cursorX >= o.x && cursorX <= o.x + o.width &&
-                        cursorY >= o.y && cursorY <= o.y + o.height
-                    );
-                    if (obj) currentlyHovered = obj.id;
-                } else {
-                    currentlyHovered = activeObjectId.current;
-                }
+                // 1. Smoothing (Interpolation)
+                state.smoothedX = state.smoothedX + (targetX - state.smoothedX) * (1 - SMOOTHING);
+                state.smoothedY = state.smoothedY + (targetY - state.smoothedY) * (1 - SMOOTHING);
 
-                if (currentlyHovered !== lastHoveredId.current) {
-                    lastHoveredId.current = currentlyHovered;
-                    setHoveredId(currentlyHovered);
-                }
+                const curX = state.smoothedX;
+                const curY = state.smoothedY;
 
-                // 2. Drag Logic
-                if (distance < 0.05) { // Pinching
-                    if (!activeObjectId.current) {
-                        // Attempt to grab
-                        if (currentlyHovered) {
-                            activeObjectId.current = currentlyHovered;
-                            const obj = objectsRef.current.find(o => o.id === activeObjectId.current);
-                            dragOffset.current = {
-                                x: cursorX - obj.x,
-                                y: cursorY - obj.y
-                            };
-                            setIsPinched(true);
-                        }
-                    } else {
-                        // Smoothly update position
-                        const obj = objectsRef.current.find(o => o.id === activeObjectId.current);
-                        if (obj) {
-                            obj.x = cursorX - dragOffset.current.x;
-                            obj.y = cursorY - dragOffset.current.y;
-
-                            // Update DOM directly for high performance (Smooth movement)
-                            const element = document.getElementById(`draggable-obj-${obj.id}`);
-                            if (element) {
-                                element.style.transform = `translate(${obj.x}px, ${obj.y}px) scale(1.15)`;
-                                element.style.boxShadow = '0 30px 60px rgba(0,0,0,0.5)';
-                                element.style.zIndex = '100';
-                                element.style.borderColor = 'rgba(255,255,255,0.8)';
+                // 2. Pinch Logic with Hysteresis & Frame Hold
+                if (distance < GRAB_START) {
+                    state.releaseFrameCount = 0;
+                    if (!state.isPinched) {
+                        state.grabFrameCount++;
+                        if (state.grabFrameCount >= FRAME_HOLD_THRESHOLD) {
+                            // Check collision before starting grab
+                            const obj = objectsRef.current.find(o =>
+                                curX >= o.x && curX <= o.x + o.width &&
+                                curY >= o.y && curY <= o.y + o.height
+                            );
+                            if (obj) {
+                                state.isPinched = true;
+                                state.activeObjectId = obj.id;
+                                state.dragOffset = { x: curX - obj.x, y: curY - obj.y };
+                                document.getElementById('status-indicator').style.backgroundColor = '#2ecc71';
+                                document.getElementById('status-text').innerText = 'OBJECT GRABBED';
                             }
                         }
                     }
-                } else { // Released
-                    if (activeObjectId.current) {
-                        const obj = objectsRef.current.find(o => o.id === activeObjectId.current);
-                        const element = document.getElementById(`draggable-obj-${activeObjectId.current}`);
-                        if (element) {
-                            element.style.transform = `translate(${obj.x}px, ${obj.y}px) scale(1)`;
-                            element.style.boxShadow = '0 10px 20px rgba(0,0,0,0.2)';
-                            element.style.zIndex = '10';
-                            element.style.borderColor = 'rgba(255,255,255,0.2)';
+                } else if (distance > GRAB_END) {
+                    state.grabFrameCount = 0;
+                    if (state.isPinched) {
+                        state.releaseFrameCount++;
+                        if (state.releaseFrameCount >= FRAME_HOLD_THRESHOLD) {
+                            // Release Object
+                            const el = document.getElementById(`draggable-obj-${state.activeObjectId}`);
+                            if (el) {
+                                el.style.transform = `translate(${objectsRef.current.find(o => o.id === state.activeObjectId).x}px, ${objectsRef.current.find(o => o.id === state.activeObjectId).y}px) scale(1)`;
+                                el.style.zIndex = '10';
+                                el.style.boxShadow = '0 10px 25px rgba(0,0,0,0.2)';
+                            }
+                            state.isPinched = false;
+                            state.activeObjectId = null;
+                            document.getElementById('status-indicator').style.backgroundColor = '#ff4757';
+                            document.getElementById('status-text').innerText = 'READY TO GRAB';
                         }
                     }
-                    activeObjectId.current = null;
-                    setIsPinched(false);
                 }
 
-                // 3. Draw 21 Hand Landmarks & Skeleton
+                // 3. Hover Detection
+                if (!state.isPinched) {
+                    const obj = objectsRef.current.find(o =>
+                        curX >= o.x && curX <= o.x + o.width &&
+                        curY >= o.y && curY <= o.y + o.height
+                    );
+                    const newHoveredId = obj ? obj.id : null;
+                    if (newHoveredId !== state.hoveredId) {
+                        if (state.hoveredId) {
+                            const prevEl = document.getElementById(`draggable-obj-${state.hoveredId}`);
+                            if (prevEl) {
+                                prevEl.style.borderColor = 'rgba(255,255,255,0.2)';
+                                prevEl.style.transform = `translate(${objectsRef.current.find(o => o.id === state.hoveredId).x}px, ${objectsRef.current.find(o => o.id === state.hoveredId).y}px) scale(1)`;
+                            }
+                        }
+                        state.hoveredId = newHoveredId;
+                        if (newHoveredId) {
+                            const nextEl = document.getElementById(`draggable-obj-${newHoveredId}`);
+                            if (nextEl) {
+                                nextEl.style.borderColor = 'rgba(255,255,255,0.8)';
+                                nextEl.style.transform = `translate(${objectsRef.current.find(o => o.id === newHoveredId).x}px, ${objectsRef.current.find(o => o.id === newHoveredId).y}px) scale(1.05)`;
+                            }
+                        }
+                    }
+                }
+
+                // 4. Drag Update
+                if (state.isPinched && state.activeObjectId) {
+                    const obj = objectsRef.current.find(o => o.id === state.activeObjectId);
+                    obj.x = curX - state.dragOffset.x;
+                    obj.y = curY - state.dragOffset.y;
+
+                    const el = document.getElementById(`draggable-obj-${obj.id}`);
+                    if (el) {
+                        el.style.transform = `translate(${obj.x}px, ${obj.y}px) scale(1.15)`;
+                        el.style.zIndex = '100';
+                        el.style.boxShadow = '0 30px 60px rgba(0,0,0,0.5)';
+                    }
+                }
+
+                // 5. Visual Feedback - Draw Skeleton
                 const connections = window.HAND_CONNECTIONS || (window.Hands && window.Hands.HAND_CONNECTIONS);
-
-                // Draw Connections
                 if (window.drawConnectors && connections) {
-                    window.drawConnectors(canvasCtx, landmarks, connections, {
-                        color: 'rgba(255, 255, 255, 0.4)',
-                        lineWidth: 3
-                    });
+                    canvasCtx.save();
+                    // Mirror the context for drawConnectors to match the camera preview
+                    canvasCtx.translate(W, 0);
+                    canvasCtx.scale(-1, 1);
+                    window.drawConnectors(canvasCtx, landmarks, connections, { color: 'rgba(255,255,255,0.3)', lineWidth: 2 });
+                    canvasCtx.restore();
                 }
 
-                // Draw 21 Landmarks (Red points as requested)
-                landmarks.forEach((pt, index) => {
-                    const pxX = (1 - pt.x) * width;
-                    const pxY = pt.y * height;
-
+                // Draw 21 points
+                landmarks.forEach((pt, i) => {
+                    const pxX = (1 - pt.x) * W;
+                    const pxY = pt.y * H;
                     canvasCtx.beginPath();
-                    canvasCtx.arc(pxX, pxY, index === 8 || index === 4 ? 8 : 4, 0, 2 * Math.PI);
-                    canvasCtx.fillStyle = (index === 8 || index === 4) ? '#2ecc71' : '#ff4757';
+                    canvasCtx.arc(pxX, pxY, (i === 4 || i === 8) ? 8 : 3, 0, 2 * Math.PI);
+                    canvasCtx.fillStyle = (i === 4 || i === 8) ? '#2ecc71' : '#ff4757';
                     canvasCtx.fill();
-                    canvasCtx.strokeStyle = 'white';
-                    canvasCtx.lineWidth = 1;
-                    canvasCtx.stroke();
                 });
 
-                // Visual Feedback for Pinch Area
+                // Precision Cursor
                 canvasCtx.beginPath();
-                canvasCtx.arc(cursorX, cursorY, 20, 0, 2 * Math.PI);
-                canvasCtx.strokeStyle = distance < 0.05 ? '#2ecc71' : 'rgba(255,255,255,0.3)';
-                canvasCtx.lineWidth = 3;
+                canvasCtx.arc(curX, curY, 25, 0, 2 * Math.PI);
+                canvasCtx.strokeStyle = state.isPinched ? '#2ecc71' : 'rgba(255,255,255,0.4)';
+                canvasCtx.lineWidth = 2;
                 canvasCtx.setLineDash([5, 5]);
                 canvasCtx.stroke();
                 canvasCtx.setLineDash([]);
 
             } else {
-                setIsPinched(false);
-                activeObjectId.current = null;
-                if (lastHoveredId.current !== null) {
-                    lastHoveredId.current = null;
-                    setHoveredId(null);
-                }
+                // Clear state if hand lost
+                state.grabFrameCount = 0;
+                state.releaseFrameCount = 0;
+                // We keep isPinched true for a few frames usually, but if hand is totally gone, release
             }
         });
 
@@ -185,138 +217,90 @@ const GestureDragDrop = () => {
 
     return (
         <div ref={containerRef} style={{
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: '#0f0f12',
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: '"Outfit", sans-serif'
+            width: '100vw', height: '100vh', backgroundColor: '#0a0a0c',
+            position: 'relative', overflow: 'hidden', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', fontFamily: '"Outfit", sans-serif'
         }}>
-            {/* Background Video (Lower opacity for better visibility of objects) */}
-            <video
-                ref={videoRef}
-                style={{
-                    position: 'absolute',
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    transform: 'scaleX(-1)',
-                    opacity: 0.3
-                }}
-            />
+            {/* Mirrored Camera View */}
+            <video ref={videoRef} style={{
+                position: 'absolute', width: '100%', height: '100%',
+                objectFit: 'cover', transform: 'scaleX(-1)', opacity: 0.25
+            }} />
 
-            {/* Gesture Landmarks Canvas */}
-            <canvas
-                ref={canvasRef}
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    zIndex: 5,
-                    pointerEvents: 'none'
-                }}
-                width={1280}
-                height={720}
-            />
+            {/* High-fidelity Canvas overlay */}
+            <canvas ref={canvasRef} style={{
+                position: 'absolute', top: 0, left: 0,
+                width: '100%', height: '100%', zIndex: 5, pointerEvents: 'none'
+            }} width={1280} height={720} />
 
             {!modelLoaded && (
                 <div style={{
-                    position: 'absolute',
-                    zIndex: 200,
-                    color: 'white',
-                    fontSize: '1.2rem',
-                    background: 'rgba(255,255,255,0.05)',
-                    padding: '20px 40px',
-                    borderRadius: '24px',
-                    backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '15px'
+                    position: 'absolute', zIndex: 200, color: 'white',
+                    background: 'rgba(255,255,255,0.05)', padding: '30px 60px',
+                    borderRadius: '30px', backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center'
                 }}>
-                    <div className="loader" style={{
-                        width: '30px',
-                        height: '30px',
-                        border: '3px solid rgba(255,255,255,0.3)',
-                        borderTopColor: '#3498db',
-                        borderRadius: '50%',
-                        animation: 'spin 1s linear infinite'
+                    <div className="pulse-loader" style={{
+                        width: '40px', height: '40px', background: '#3498db',
+                        borderRadius: '50%', margin: '0 auto 20px auto',
+                        animation: 'pulse 1.5s infinite ease-in-out'
                     }} />
-                    Initializing Workspace...
+                    <p style={{ fontWeight: 600, fontSize: '1.2rem' }}>Calibrating Stability Models...</p>
                 </div>
             )}
 
-            {/* Draggable Objects Layer */}
+            {/* Draggable UI Layer */}
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
                 {objectsRef.current.map(obj => (
                     <div
                         key={obj.id}
                         id={`draggable-obj-${obj.id}`}
                         style={{
-                            position: 'absolute',
-                            width: obj.width,
-                            height: obj.height,
-                            backgroundColor: obj.color,
-                            borderRadius: '32px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'white',
-                            fontWeight: '600',
-                            fontSize: '1rem',
-                            boxShadow: hoveredId === obj.id ? '0 20px 40px rgba(0,0,0,0.4)' : '0 10px 25px rgba(0,0,0,0.2)',
-                            transform: `translate(${obj.x}px, ${obj.y}px) scale(${hoveredId === obj.id ? 1.05 : 1})`,
-                            transition: activeObjectId.current === obj.id ? 'none' : 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                            zIndex: hoveredId === obj.id ? 100 : 10,
-                            border: `4px solid ${hoveredId === obj.id ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.2)'}`,
-                            textAlign: 'center',
-                            padding: '20px',
-                            backdropFilter: 'blur(5px)',
+                            position: 'absolute', width: obj.width, height: obj.height,
+                            backgroundColor: obj.color, borderRadius: '40px',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            justifyContent: 'center', color: '#1a1a1a', fontWeight: '700',
+                            fontSize: '1.1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+                            transform: `translate(${obj.x}px, ${obj.y}px)`,
+                            zIndex: 10, border: '4px solid rgba(255,255,255,0.2)',
+                            textAlign: 'center', padding: '20px', backdropFilter: 'blur(8px)',
+                            transition: 'border-color 0.3s, scale 0.3s'
                         }}
                     >
-                        <span style={{ fontSize: '1.2rem', marginBottom: '8px' }}>📦</span>
+                        <div style={{ fontSize: '2rem', marginBottom: '10px' }}>
+                            {obj.id === 1 ? '🎯' : obj.id === 2 ? '🔒' : '💎'}
+                        </div>
                         {obj.label}
                     </div>
                 ))}
             </div>
 
-            {/* Status Bar */}
+            {/* Professional HUD Status Indicator */}
             <div style={{
-                position: 'absolute',
-                bottom: '40px',
-                padding: '12px 24px',
-                background: 'rgba(0, 0, 0, 0.6)',
-                backdropFilter: 'blur(15px)',
-                borderRadius: '100px',
-                color: 'white',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                zIndex: 150,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                fontSize: '0.9rem',
-                letterSpacing: '0.5px'
+                position: 'absolute', bottom: '50px', padding: '15px 35px',
+                background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(20px)',
+                borderRadius: '100px', color: 'white',
+                border: '1px solid rgba(255,255,255,0.15)', zIndex: 150,
+                display: 'flex', alignItems: 'center', gap: '15px',
+                boxShadow: '0 15px 40px rgba(0,0,0,0.4)',
+                transform: 'translateY(0)', transition: 'transform 0.3s ease'
             }}>
-                <div style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor: isPinched ? '#2ecc71' : '#ff4757',
-                    boxShadow: `0 0 15px ${isPinched ? '#2ecc71' : '#ff4757'}`
+                <div id="status-indicator" style={{
+                    width: '12px', height: '12px', borderRadius: '50%',
+                    backgroundColor: '#ff4757', transition: 'background-color 0.3s',
+                    boxShadow: '0 0 15px currentColor'
                 }} />
-                {isPinched ? 'OBJECT GRABBED' : hoveredId ? 'READY TO GRAB' : 'MOVE CURSOR TO OBJECT'}
+                <span id="status-text" style={{
+                    fontSize: '1rem', fontWeight: 600, letterSpacing: '1px',
+                    textTransform: 'uppercase'
+                }}>Ready to Grab</span>
             </div>
 
             <style>{`
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
+                @keyframes pulse {
+                    0% { transform: scale(0.8); opacity: 0.5; }
+                    50% { transform: scale(1.1); opacity: 1; }
+                    100% { transform: scale(0.8); opacity: 0.5; }
                 }
             `}</style>
         </div>
