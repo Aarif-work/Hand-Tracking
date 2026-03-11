@@ -144,10 +144,44 @@ const GestureTetris = () => {
                     }
                 }
 
+                // --- THUMBS UP DETECTION (CELEBRATION) ---
+                const isThumbUp = landmarks[4].y < landmarks[3].y &&
+                    landmarks[8].y > landmarks[6].y &&
+                    landmarks[12].y > landmarks[10].y &&
+                    landmarks[16].y > landmarks[14].y &&
+                    landmarks[20].y > landmarks[18].y;
+
+                // --- PEACE GESTURE DETECTION (NEW) ---
+                const isPeace = landmarks[8].y < landmarks[6].y && // Index open
+                    landmarks[12].y < landmarks[10].y && // Middle open
+                    landmarks[16].y > landmarks[14].y && // Ring closed
+                    landmarks[20].y > landmarks[18].y;   // Pinky closed
+
+                if (isThumbUp) {
+                    state.likeBuffer = (state.likeBuffer || 0) + 1;
+                    if (state.likeBuffer > 10) {
+                        triggerCelebration('👍');
+                        state.likeBuffer = -50;
+                    }
+                } else if (isPeace) {
+                    state.peaceBuffer = (state.peaceBuffer || 0) + 1;
+                    if (state.peaceBuffer > 10) {
+                        triggerCelebration('✌️');
+                        state.peaceBuffer = -50;
+                    }
+                } else {
+                    state.likeBuffer = Math.max(0, (state.likeBuffer || 0) - 1);
+                    state.peaceBuffer = Math.max(0, (state.peaceBuffer || 0) - 1);
+                }
+
                 // GLOW FEED
                 canvasCtx.save();
                 const glowGrd = canvasCtx.createRadialGradient(cx, cy, 10, cx, cy, 100);
-                glowGrd.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+                let glowColor = 'rgba(255, 255, 255, 0.15)';
+                if (isThumbUp) glowColor = 'rgba(244, 63, 94, 0.3)';
+                else if (isPeace) glowColor = 'rgba(168, 85, 247, 0.3)';
+
+                glowGrd.addColorStop(0, glowColor);
                 glowGrd.addColorStop(1, 'transparent');
                 canvasCtx.fillStyle = glowGrd;
                 canvasCtx.beginPath();
@@ -158,14 +192,22 @@ const GestureTetris = () => {
                 // LANDMARKS
                 canvasCtx.save();
                 canvasCtx.translate(W, 0); canvasCtx.scale(-1, 1);
-                window.drawConnectors?.(canvasCtx, landmarks, window.HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.2)', lineWidth: 1 });
+
+                let connectorColor = 'rgba(255,255,255,0.2)';
+                if (isThumbUp) connectorColor = '#f43f5e';
+                else if (isPeace) connectorColor = '#a855f7';
+
+                window.drawConnectors?.(canvasCtx, landmarks, window.HAND_CONNECTIONS, {
+                    color: connectorColor,
+                    lineWidth: (isThumbUp || isPeace) ? 3 : 1
+                });
                 canvasCtx.restore();
 
                 landmarks.forEach((p, i) => {
                     const px = (1 - p.x) * W; const py = p.y * H;
                     canvasCtx.beginPath();
                     canvasCtx.arc(px, py, (i === 4 || i === 8) ? 6 : 2, 0, Math.PI * 2);
-                    canvasCtx.fillStyle = (i === 4 || i === 8) ? '#4ade80' : '#fff';
+                    canvasCtx.fillStyle = (i === 4) ? '#f43f5e' : ((i === 8) ? '#4ade80' : '#fff');
                     canvasCtx.fill();
                 });
             }
@@ -180,22 +222,61 @@ const GestureTetris = () => {
         return () => { hands.close(); camera.stop(); };
     }, []);
 
+    const triggerCelebration = (emoji) => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        // Create Floating Emoji
+        const el = document.createElement('div');
+        el.className = 'celebration-emoji';
+        el.innerHTML = emoji;
+        el.style.left = '50%';
+        el.style.top = '50%';
+        container.appendChild(el);
+
+        // Create Sparkles
+        let colorType = 'random';
+        if (emoji === '✌️') colorType = 'purple';
+
+        for (let i = 0; i < 30; i++) {
+            const sparkle = document.createElement('div');
+            sparkle.className = 'cracker-sparkle';
+            const angle = Math.random() * Math.PI * 2;
+            const velocity = 5 + Math.random() * 10;
+            const vx = Math.cos(angle) * velocity;
+            const vy = Math.sin(angle) * velocity;
+
+            sparkle.style.left = '50%';
+            sparkle.style.top = '50%';
+            sparkle.style.setProperty('--vx', `${vx * 20}px`);
+            sparkle.style.setProperty('--vy', `${vy * 20}px`);
+
+            if (colorType === 'purple') {
+                sparkle.style.backgroundColor = `hsl(${270 + Math.random() * 40}, 100%, 60%)`;
+            } else {
+                sparkle.style.backgroundColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            }
+
+            container.appendChild(sparkle);
+            setTimeout(() => sparkle.remove(), 1000);
+        }
+
+        setTimeout(() => el.remove(), 2000);
+    };
+
     return (
         <div ref={containerRef} style={{
             width: '100vw', height: '100vh',
-            background: '#0f172a',
+            background: '#000',
             position: 'relative', overflow: 'hidden', fontFamily: '"Outfit", sans-serif'
         }}>
-            {/* Background Shelf (Image inspired) */}
-            <div style={{
-                position: 'absolute', bottom: 0, width: '100%', height: '80px',
-                background: '#fbbf24', borderTop: '4px solid #d97706', zIndex: 1
-            }} />
+            {/* Celebration Container Layer */}
+            <div id="celebration-layer" style={{ position: 'absolute', inset: 0, zIndex: 1000, pointerEvents: 'none' }} />
 
             {/* Clear Cam Feed */}
             <video ref={videoRef} style={{
                 position: 'absolute', width: '100%', height: '100%',
-                objectFit: 'cover', transform: 'scaleX(-1)', opacity: 0.2,
+                objectFit: 'cover', transform: 'scaleX(-1)', opacity: 0.8,
                 zIndex: 0
             }} />
 
@@ -255,6 +336,36 @@ const GestureTetris = () => {
                 }
                 .soft-drop { animation: drop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
                 @keyframes drop { 0% { scale: 0.9; } 100% { scale: 1; } }
+
+                .celebration-emoji {
+                    position: absolute;
+                    font-size: 120px;
+                    transform: translate(-50%, -50%);
+                    animation: emojiPop 2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+                    z-index: 1001;
+                }
+
+                @keyframes emojiPop {
+                    0% { transform: translate(-50%, -50%) scale(0) rotate(-20deg); opacity: 0; }
+                    20% { transform: translate(-50%, -50%) scale(1.5) rotate(10deg); opacity: 1; }
+                    50% { transform: translate(-50%, -60%) scale(1.2) rotate(0deg); opacity: 1; }
+                    100% { transform: translate(-50%, -150%) scale(1) rotate(0deg); opacity: 0; }
+                }
+
+                .cracker-sparkle {
+                    position: absolute;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    transform: translate(-50%, -50%);
+                    animation: sparkleExplode 1s ease-out forwards;
+                    z-index: 1000;
+                }
+
+                @keyframes sparkleExplode {
+                    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+                    100% { transform: translate(calc(-50% + var(--vx)), calc(-50% + var(--vy))) scale(0); opacity: 0; }
+                }
             `}</style>
         </div>
     );
