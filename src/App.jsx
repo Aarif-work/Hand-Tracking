@@ -72,7 +72,8 @@ function App() {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          <span>🏠</span> <span className="home-btn-text">Back to Home</span>
+          <img src="/icon-192.png" alt="logo" style={{ width: '22px', height: '22px', borderRadius: '6px' }} />
+          <span className="home-btn-text">Back to Home</span>
         </button>
       )}
 

@@ -7,7 +7,12 @@ const GestureTetris = () => {
     const [modelLoaded, setModelLoaded] = useState(false);
     const [scale, setScale] = useState(1);
     const [assembledCount, setAssembledCount] = useState(0);
-    const [currentIndex, setCurrentIndex] = useState(0); // drives mobile one-by-one reveal
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [gameComplete, setGameComplete] = useState(false);
+    const [gameStarted, setGameStarted] = useState(false);
+    const [elapsedTime, setElapsedTime] = useState(0);
+    const startTimeRef = useRef(null);
+    const timerRef = useRef(null);
 
     const isMobile = window.innerWidth <= 768;
 
@@ -163,17 +168,41 @@ const GestureTetris = () => {
                 el.classList.add('assembled-shape');
             }
 
-            // Center of assembled shape (approx)
             const cx = obj.targetX + GRID_SIZE;
             const cy = obj.targetY + GRID_SIZE;
             triggerClash(cx, cy, obj.color);
-            setAssembledCount(prev => prev + 1);
+            const newCount = engine.current.objects.filter(o => o.assembled).length;
+            setAssembledCount(newCount);
+
+            // Check win condition
+            if (newCount === engine.current.objects.length) {
+                const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000);
+                clearInterval(timerRef.current);
+                setElapsedTime(elapsed);
+                setTimeout(() => setGameComplete(true), 600); // slight delay for last clash effect
+            }
             return true;
         }
         return false;
     };
 
+    // ── Auto-start Timer on Load ──────────────────────────────────────────────
+    useEffect(() => {
+        if (modelLoaded && !startTimeRef.current) {
+            startTimeRef.current = Date.now();
+            setGameStarted(true);
+        }
+    }, [modelLoaded]);
+
+    // Hand grip & tracking logic remains in engine.current and directs DOM updates.
+    // We moved the ticking timer to a component to prevent re-renders that break drags.
+
+
+    // Hand grip & tracking logic remains in engine.current and directs DOM updates.
+    // We removed the ticking currentTime state here to prevent re-renders.
+
     // ── MediaPipe Hands ───────────────────────────────────────────────────────
+
     useEffect(() => {
         if (!window.Hands || !window.Camera) return;
 
@@ -279,6 +308,11 @@ const GestureTetris = () => {
                             }
 
                             if (obj) {
+                                // Start timer on first grab
+                                if (!startTimeRef.current) {
+                                    startTimeRef.current = Date.now();
+                                    setGameStarted(true);
+                                }
                                 state.isGrabbing = true;
                                 state.activeId = obj.id;
                                 state.dragOffset = { x: cx - obj.currentX, y: cy - obj.currentY };
@@ -507,14 +541,140 @@ const GestureTetris = () => {
                 </span>
             </div>
 
-            {/* All-assembled trophy */}
-            {assembledCount === totalPieces && (
-                <div className="all-assembled-banner">🏆 COMPLETE!</div>
+            {/* Live Timer (Top Right) */}
+            {gameStarted && (
+                <LiveTimer startTimeRef={startTimeRef} gameComplete={gameComplete} />
+            )}
+
+            {/* ── GAME COMPLETE POPUP ──────────────────────────────────── */}
+            {gameComplete && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 9999,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.75)',
+                    backdropFilter: 'blur(8px)',
+                    animation: 'fadeInOverlay 0.4s ease'
+                }}>
+                    {/* Confetti particles */}
+                    {Array.from({ length: 60 }).map((_, i) => {
+                        const colors = ['#ff5a5f', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#facc15', '#f43f5e', '#06b6d4'];
+                        const color = colors[i % colors.length];
+                        const left = `${Math.random() * 100}%`;
+                        const delay = `${Math.random() * 2}s`;
+                        const duration = `${2 + Math.random() * 2}s`;
+                        const size = `${6 + Math.random() * 10}px`;
+                        const shape = Math.random() > 0.5 ? '50%' : '2px';
+                        return (
+                            <div key={i} style={{
+                                position: 'absolute',
+                                top: '-20px',
+                                left,
+                                width: size,
+                                height: size,
+                                borderRadius: shape,
+                                backgroundColor: color,
+                                animation: `confettiFall ${duration} ${delay} ease-in forwards`,
+                                zIndex: 10000
+                            }} />
+                        );
+                    })}
+
+                    {/* Popup Card */}
+                    <div style={{
+                        background: 'white',
+                        borderRadius: '28px',
+                        padding: '2.5rem 2rem',
+                        textAlign: 'center',
+                        maxWidth: '340px',
+                        width: '90vw',
+                        boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
+                        position: 'relative',
+                        animation: 'popIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275)',
+                        zIndex: 10001
+                    }}>
+                        <div style={{ fontSize: '4rem', marginBottom: '0.5rem' }}>🏆</div>
+                        <h2 style={{
+                            fontSize: '1.8rem',
+                            fontWeight: 900,
+                            background: 'linear-gradient(135deg, #ff5a5f, #f59e0b)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            marginBottom: '0.5rem',
+                            lineHeight: 1.2
+                        }}>
+                            Puzzle Complete!
+                        </h2>
+                        <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '1.5rem' }}>
+                            You assembled all 5 pieces
+                        </p>
+
+                        {/* Time display */}
+                        <div style={{
+                            background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+                            border: '2px solid #e2e8f0',
+                            borderRadius: '16px',
+                            padding: '1rem 1.5rem',
+                            marginBottom: '1.5rem'
+                        }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '2px', marginBottom: '0.25rem' }}>
+                                YOUR TIME
+                            </div>
+                            <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#1e293b', lineHeight: 1, display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '4px' }}>
+                                {Math.floor(elapsedTime / 60)}<span style={{ fontSize: '1.2rem', color: '#ff5a5f', fontWeight: 700, marginRight: '8px' }}>m</span>
+                                {(elapsedTime % 60)}<span style={{ fontSize: '1.2rem', color: '#ff5a5f', fontWeight: 700 }}>s</span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                                {elapsedTime < 30 ? '⚡ Lightning Fast!' : elapsedTime < 60 ? '🔥 Impressive!' : elapsedTime < 120 ? '✨ Great Job!' : '💪 Well Done!'}
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => window.location.reload()}
+                            style={{
+                                width: '100%',
+                                padding: '1rem',
+                                background: 'linear-gradient(135deg, #ff5a5f, #f59e0b)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '14px',
+                                fontSize: '1rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                letterSpacing: '0.5px',
+                                boxShadow: '0 6px 20px rgba(255,90,95,0.4)'
+                            }}
+                        >
+                            🔄 Play Again
+                        </button>
+                    </div>
+                </div>
             )}
 
 
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
+
+                @keyframes confettiFall {
+                    0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+                    80%  { opacity: 1; }
+                    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+                }
+
+                @keyframes fadeInOverlay {
+                    from { opacity: 0; }
+                    to   { opacity: 1; }
+                }
+
+                @keyframes timerBlink {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; transform: scale(1.02); }
+                }
+
+                @keyframes popIn {
+                    0%   { transform: scale(0.5); opacity: 0; }
+                    80%  { transform: scale(1.05); }
+                    100% { transform: scale(1); opacity: 1; }
+                }
 
                 .tetris-block::after {
                     content: '';
@@ -661,3 +821,40 @@ const GestureTetris = () => {
 };
 
 export default GestureTetris;
+
+const LiveTimer = ({ startTimeRef, gameComplete }) => {
+    const [currentTime, setCurrentTime] = useState(0);
+
+    useEffect(() => {
+        let interval;
+        if (startTimeRef.current && !gameComplete) {
+            const update = () => {
+                setCurrentTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+            };
+            update();
+            interval = setInterval(update, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [gameComplete]);
+
+    return (
+        <div style={{
+            position: 'absolute', top: '20px', right: '20px',
+            background: 'rgba(255,255,255,0.9)',
+            backdropFilter: 'blur(14px)',
+            padding: '8px 20px',
+            borderRadius: '50px',
+            border: '1px solid rgba(0,0,0,0.1)',
+            color: '#000', zIndex: 100,
+            display: 'flex', gap: '8px', alignItems: 'center',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+            animation: !gameComplete ? 'timerBlink 1s infinite' : 'none'
+        }}>
+            <span style={{ fontSize: '1rem' }}>⏱️</span>
+            <span style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'monospace' }}>
+                {Math.floor(currentTime / 60).toString().padStart(2, '0')}:
+                {(currentTime % 60).toString().padStart(2, '0')}
+            </span>
+        </div>
+    );
+};

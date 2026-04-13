@@ -15,6 +15,21 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
         }}>
             {/* Hero Section */}
             <section className="animate-fade-in" style={{ textAlign: 'center', paddingTop: '2rem' }}>
+                {/* Logo */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <img
+                        src="/icon-192.png"
+                        alt="Motion Puzzle Studio Logo"
+                        style={{
+                            width: '100px',
+                            height: '100px',
+                            borderRadius: '28px',
+                            boxShadow: '0 8px 32px rgba(255,90,95,0.25)',
+                            display: 'inline-block'
+                        }}
+                    />
+                </div>
+
                 <h1 className="gradient-text" style={{
                     fontSize: '3.5rem',
                     fontWeight: 800,
