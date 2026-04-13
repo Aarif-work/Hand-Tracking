@@ -1,85 +1,107 @@
 import React, { useState } from 'react'
 import HandTracker from './components/HandTracker'
 import GestureTetris from './components/GestureTetris'
-import GestureInstaFeed from './components/GestureInstaFeed'
-import GestureReelsTouchSnap from './components/GestureReelsTouchSnap'
+import Dashboard from './components/Dashboard'
+import PrivacyPolicy from './components/PrivacyPolicy'
 
 function App() {
-  const [view, setView] = useState('reels') // Start with the new Reels view
+  const [view, setView] = useState('dashboard')
 
-  const views = ['tracker', 'tetris', 'insta', 'reels']
-
-  const handleNavigate = (direction) => {
-    const currentIndex = views.indexOf(view)
-    if (direction === 'next') {
-      const nextIndex = (currentIndex + 1) % views.length
-      setView(views[nextIndex])
-    } else {
-      const prevIndex = (currentIndex - 1 + views.length) % views.length
-      setView(views[prevIndex])
+  const renderView = () => {
+    switch (view) {
+      case 'dashboard':
+        return (
+          <Dashboard
+            onStartTetris={() => setView('tetris')}
+            onStartTracker={() => setView('tracker')}
+            onShowPrivacy={() => setView('privacy')}
+          />
+        )
+      case 'tetris':
+        return <GestureTetris />
+      case 'tracker':
+        return <HandTracker />
+      case 'privacy':
+        return <PrivacyPolicy />
+      default:
+        return <Dashboard
+          onStartTetris={() => setView('tetris')}
+          onStartTracker={() => setView('tracker')}
+          onShowPrivacy={() => setView('privacy')}
+        />
     }
   }
 
   return (
-    <div className="App" style={{ background: '#000', minHeight: '100vh', overflow: 'hidden' }}>
-      <div style={{
-        position: 'absolute',
-        top: '20px',
-        left: '20px',
-        zIndex: 1000,
-        display: 'flex',
-        gap: '10px'
-      }}>
+    <div className="App" style={{
+      background: 'var(--background)',
+      minHeight: '100vh',
+      overflowX: 'hidden',
+      color: 'var(--text)'
+    }}>
+      {/* Navigation Layer */}
+      {view !== 'dashboard' && (
         <button
-          onClick={() => setView('tracker')}
-          style={buttonStyle(view === 'tracker')}
+          onClick={() => setView('dashboard')}
+          className="animate-fade-in"
+          style={{
+            position: 'fixed',
+            top: '30px',
+            left: '30px',
+            zIndex: 3000,
+            padding: '0.75rem 1.5rem',
+            color: 'var(--text)',
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: 'white',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.borderColor = 'var(--text)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.borderColor = '#e2e8f0';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
         >
-          Tracker
+          <span>🏠</span> Back to Home
         </button>
-        <button
-          onClick={() => setView('tetris')}
-          style={buttonStyle(view === 'tetris')}
-        >
-          Tetris
-        </button>
-        <button
-          onClick={() => setView('insta')}
-          style={buttonStyle(view === 'insta')}
-        >
-          Feed
-        </button>
-        <button
-          onClick={() => setView('reels')}
-          style={buttonStyle(view === 'reels')}
-        >
-          Reels
-        </button>
-      </div>
+      )}
 
-      <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
-        {view === 'tracker' && <HandTracker />}
-        {view === 'tetris' && <GestureTetris />}
-        {view === 'insta' && <GestureInstaFeed onNavigate={handleNavigate} />}
-        {view === 'reels' && <GestureReelsTouchSnap onNavigate={handleNavigate} />}
-      </div>
+      {renderView()}
+
+      {/* Global Background Elements */}
+      <div style={{
+        position: 'fixed',
+        top: '-10%',
+        right: '-10%',
+        width: '40%',
+        height: '40%',
+        background: 'radial-gradient(circle, rgba(255, 90, 95, 0.05) 0%, transparent 70%)',
+        zIndex: -1,
+        pointerEvents: 'none'
+      }} />
+      <div style={{
+        position: 'fixed',
+        bottom: '-10%',
+        left: '-10%',
+        width: '40%',
+        height: '40%',
+        background: 'radial-gradient(circle, rgba(255, 180, 0, 0.05) 0%, transparent 70%)',
+        zIndex: -1,
+        pointerEvents: 'none'
+      }} />
     </div>
   )
 }
 
-const buttonStyle = (isActive) => ({
-  padding: '8px 16px',
-  borderRadius: '12px',
-  border: '1px solid rgba(255,255,255,0.1)',
-  backgroundColor: isActive ? 'rgba(59, 130, 246, 0.5)' : 'rgba(0, 0, 0, 0.4)',
-  color: 'white',
-  cursor: 'pointer',
-  backdropFilter: 'blur(10px)',
-  fontSize: '0.75rem',
-  fontWeight: '600',
-  transition: 'all 0.3s ease',
-  boxShadow: isActive ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
-  letterSpacing: '1px',
-  textTransform: 'uppercase'
-})
-
 export default App
+
