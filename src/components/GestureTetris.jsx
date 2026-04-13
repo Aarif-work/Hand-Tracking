@@ -5,79 +5,80 @@ const GestureTetris = () => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const [modelLoaded, setModelLoaded] = useState(false);
+    const [scale, setScale] = useState(1);
     const [assembledCount, setAssembledCount] = useState(0);
+    const [currentIndex, setCurrentIndex] = useState(0); // drives mobile one-by-one reveal
 
-    // Configuration
-    const GRID_SIZE = 50; // each cell is 50×50 px
+    const isMobile = window.innerWidth <= 768;
 
+    // On portrait phones, cover-scaling a 1280x720 canvas means only the CENTER
+    // ~330px (X: ~474-806) of the canvas is visible. All pieces + zone must live there.
+    // GRID_SIZE = 60 → zone = 5×60 = 300px → fits within 332px visible width.
+    const GRID_SIZE = isMobile ? 60 : 50;
     const GRAB_START = 0.08;
     const GRAB_END = 0.12;
     const FRAME_HOLD = 2;
     const SMOOTHING = 0.8;
 
-    // Zone anchor (for the perfect 5x5 square assembly zone)
-    const ZX = 920;
-    const ZY = 180;
+    // Zone anchor — centered horizontally: 640-150=490, vertically: 360-150=210
+    const ZX = isMobile ? 490 : 920;
+    const ZY = isMobile ? 210 : 180;
 
-    /*
-     * PERFECT 5x5 SQUARE PUZZLE:
-     * 5 pieces, 5 blocks each = 25 blocks total.
-     * Fits perfectly into a 5x5 grid with zero overlaps or gaps.
-     */
+    // Mobile piece start positions within visible X range (490-790)
+    // Pieces appear above (y~40) or below (y~580) the zone (zone y: 210-510)
     const SHAPES = [
         {
             type: 'Corner',
-            color: '#f87171', // Red
+            color: '#ff5a5f',
             blocks: [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]],
-            accent: '#dc2626',
-            x: 100, y: 100,
+            accent: '#d94a4e',
+            x: isMobile ? 530 : 100, y: isMobile ? 40 : 100,
             targetX: ZX + 0 * GRID_SIZE,
             targetY: ZY + 0 * GRID_SIZE,
         },
         {
             type: 'Square+',
-            color: '#60a5fa', // Blue
+            color: '#3b82f6',
             blocks: [[0, 0], [1, 0], [0, 1], [1, 1], [1, 2]],
-            accent: '#2563eb',
-            x: 100, y: 340,
+            accent: '#1e40af',
+            x: isMobile ? 680 : 100, y: isMobile ? 40 : 340,
             targetX: ZX + 3 * GRID_SIZE,
             targetY: ZY + 0 * GRID_SIZE,
         },
         {
             type: 'C-Piece',
-            color: '#4ade80', // Green
+            color: '#10b981',
             blocks: [[0, 0], [1, 0], [0, 1], [0, 2], [1, 2]],
-            accent: '#16a34a',
-            x: 350, y: 100,
+            accent: '#065f46',
+            x: isMobile ? 530 : 350, y: isMobile ? 570 : 100,
             targetX: ZX + 1 * GRID_SIZE,
             targetY: ZY + 1 * GRID_SIZE,
         },
         {
             type: 'Stair',
-            color: '#facc15', // Yellow
+            color: '#f59e0b',
             blocks: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]],
-            accent: '#ca8a04',
-            x: 350, y: 340,
+            accent: '#92400e',
+            x: isMobile ? 680 : 350, y: isMobile ? 570 : 340,
             targetX: ZX + 2 * GRID_SIZE,
             targetY: ZY + 2 * GRID_SIZE,
         },
         {
             type: 'L-Long',
-            color: '#c084fc', // Purple
+            color: '#8b5cf6',
             blocks: [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1]],
-            accent: '#7c3aed',
-            x: 200, y: 550,
+            accent: '#5b21b6',
+            x: isMobile ? 590 : 200, y: isMobile ? 620 : 550,
             targetX: ZX + 0 * GRID_SIZE,
             targetY: ZY + 3 * GRID_SIZE,
         },
     ];
 
-    // Compute zone bounding box for drawing exactly a 5x5 square
     const ZONE = {
-        x: ZX - 10,
-        y: ZY - 10,
-        width: GRID_SIZE * 5 + 20,
-        height: GRID_SIZE * 5 + 20,
+        x: ZX - 5,
+        y: ZY - 5,
+        width: GRID_SIZE * 5 + 10,
+        height: GRID_SIZE * 5 + 10,
     };
 
     // Engine State
@@ -89,30 +90,21 @@ const GestureTetris = () => {
         releaseFrames: 0,
         isGrabbing: false,
         cursor: { x: 0, y: 0 },
+        currentIndex: 0 // mirrored from React state for use inside onResults
     });
+
+
 
     // ── Clash / Explosion Effect ──────────────────────────────────────────────
     const triggerClash = (x, y, color) => {
-        const container = containerRef.current;
-        if (!container) return;
-
-        // Shockwave ring
-        const ring = document.createElement('div');
-        ring.className = 'clash-ring';
-        ring.style.left = `${x}vw`;   // convert canvas px → vw below
-        ring.style.top = `${y}vh`;
-
-        // Because canvas is 1280×720 but viewport may differ, use %
-        const cvs = containerRef.current;
-        const vw = cvs.clientWidth;
-        const vh = cvs.clientHeight;
-        const px = (x / 1280) * vw;
-        const py = (y / 720) * vh;
+        const board = document.getElementById('game-scaling-layer');
+        if (!board) return;
 
         const addEl = (el, offsetY = 0) => {
-            el.style.left = `${px}px`;
-            el.style.top = `${py + offsetY}px`;
-            container.appendChild(el);
+            el.style.left = `${x}px`;
+            el.style.top = `${y + offsetY}px`;
+            el.style.position = 'absolute';
+            board.appendChild(el);
         };
 
         const ringEl = document.createElement('div');
@@ -121,11 +113,11 @@ const GestureTetris = () => {
         addEl(ringEl);
         setTimeout(() => ringEl.remove(), 800);
 
-        // Flash
+        // Flash (Still full screen)
         const flash = document.createElement('div');
         flash.className = 'clash-flash';
         flash.style.background = color;
-        container.appendChild(flash);
+        containerRef.current.appendChild(flash);
         setTimeout(() => flash.remove(), 300);
 
         // Debris
@@ -137,21 +129,11 @@ const GestureTetris = () => {
             d.style.setProperty('--dx', `${Math.cos(angle) * speed}px`);
             d.style.setProperty('--dy', `${Math.sin(angle) * speed}px`);
             d.style.backgroundColor = color;
-            d.style.width = `${6 + Math.random() * 10}px`;
-            d.style.height = `${6 + Math.random() * 10}px`;
-            d.style.borderRadius = Math.random() > 0.5 ? '50%' : '3px';
+            d.style.width = `${8 + Math.random() * 12}px`;
+            d.style.height = `${8 + Math.random() * 12}px`;
+            d.style.borderRadius = Math.random() > 0.5 ? '50%' : '4px';
             addEl(d);
             setTimeout(() => d.remove(), 850);
-        }
-
-        // Rays
-        for (let i = 0; i < 8; i++) {
-            const ray = document.createElement('div');
-            ray.className = 'clash-ray';
-            ray.style.setProperty('--angle', `${(i / 8) * Math.PI * 2}rad`);
-            ray.style.backgroundColor = color;
-            addEl(ray);
-            setTimeout(() => ray.remove(), 600);
         }
 
         // Snap text
@@ -159,9 +141,10 @@ const GestureTetris = () => {
         snap.className = 'clash-snap-text';
         snap.innerText = ['SNAP!', 'LOCKED!', 'FIT!', 'BOOM!'][Math.floor(Math.random() * 4)];
         snap.style.color = color;
-        addEl(snap, -40);
+        addEl(snap, -60);
         setTimeout(() => snap.remove(), 1000);
     };
+
 
     // ── Assembly Snap Check ───────────────────────────────────────────────────
     const checkAssembly = (obj) => {
@@ -230,26 +213,25 @@ const GestureTetris = () => {
             ctx.fillText('ASSEMBLY ZONE', ZONE.x + ZONE.width / 2, ZONE.y - 8);
             ctx.restore();
 
-            // ── Draw Ghost Slot for each unassembled shape ────────────────────
-            state.objects.forEach(obj => {
+            // ── Draw Ghost Slot ────────────────────
+            state.objects.forEach((obj, idx) => {
                 if (obj.assembled) return;
+                // On mobile, only show the CURRENT target. On desktop, show all.
+                if (isMobile && idx !== state.currentIndex) return;
+
                 obj.blocks.forEach(([bx, by]) => {
                     const rx = obj.targetX + bx * GRID_SIZE;
                     const ry = obj.targetY + by * GRID_SIZE;
                     ctx.save();
-                    ctx.globalAlpha = 0.20;
+                    ctx.globalAlpha = 0.25;
                     ctx.fillStyle = obj.color;
                     ctx.beginPath();
-                    ctx.roundRect(rx + 3, ry + 3, GRID_SIZE - 6, GRID_SIZE - 6, 6);
+                    ctx.roundRect(rx + 3, ry + 3, GRID_SIZE - 6, GRID_SIZE - 6, 8);
                     ctx.fill();
-                    ctx.globalAlpha = 0.45;
                     ctx.strokeStyle = obj.color;
-                    ctx.lineWidth = 1.5;
-                    ctx.setLineDash([5, 4]);
-                    ctx.beginPath();
-                    ctx.roundRect(rx + 3, ry + 3, GRID_SIZE - 6, GRID_SIZE - 6, 6);
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
                     ctx.stroke();
-                    ctx.setLineDash([]);
                     ctx.restore();
                 });
             });
@@ -274,19 +256,32 @@ const GestureTetris = () => {
                     if (!state.isGrabbing) {
                         state.grabFrames++;
                         if (state.grabFrames >= FRAME_HOLD) {
-                            const obj = [...state.objects].reverse().find(o => {
-                                if (o.assembled) return false;
-                                return o.blocks.some(([bx, by]) => {
-                                    const rx = o.currentX + bx * GRID_SIZE;
-                                    const ry = o.currentY + by * GRID_SIZE;
-                                    return cx >= rx && cx <= rx + GRID_SIZE && cy >= ry && cy <= ry + GRID_SIZE;
+                            let obj;
+                            if (isMobile) {
+                                const target = state.objects[state.currentIndex];
+                                if (target && !target.assembled) {
+                                    const isOver = target.blocks.some(([bx, by]) => {
+                                        const rx = target.currentX + bx * GRID_SIZE;
+                                        const ry = target.currentY + by * GRID_SIZE;
+                                        return cx >= rx && cx <= rx + GRID_SIZE && cy >= ry && cy <= ry + GRID_SIZE;
+                                    });
+                                    if (isOver) obj = target;
+                                }
+                            } else {
+                                obj = [...state.objects].reverse().find(o => {
+                                    if (o.assembled) return false;
+                                    return o.blocks.some(([bx, by]) => {
+                                        const rx = o.currentX + bx * GRID_SIZE;
+                                        const ry = o.currentY + by * GRID_SIZE;
+                                        return cx >= rx && cx <= rx + GRID_SIZE && cy >= ry && cy <= ry + GRID_SIZE;
+                                    });
                                 });
-                            });
+                            }
+
                             if (obj) {
                                 state.isGrabbing = true;
                                 state.activeId = obj.id;
                                 state.dragOffset = { x: cx - obj.currentX, y: cy - obj.currentY };
-                                document.getElementById('tetris-status').innerText = 'LOCKED';
                             }
                         }
                     }
@@ -300,7 +295,10 @@ const GestureTetris = () => {
                                 obj.currentX = Math.round(obj.currentX / GRID_SIZE) * GRID_SIZE;
                                 obj.currentY = Math.round(obj.currentY / GRID_SIZE) * GRID_SIZE;
                                 const snapped = checkAssembly(obj);
-                                if (!snapped) {
+                                if (snapped && isMobile) {
+                                    engine.current.currentIndex++;
+                                    setCurrentIndex(engine.current.currentIndex); // trigger re-render
+                                } else if (!snapped) {
                                     const el = document.getElementById(`tetris-shape-${obj.id}`);
                                     if (el) {
                                         el.style.transform = `translate(${obj.currentX}px, ${obj.currentY}px) scale(1)`;
@@ -310,7 +308,8 @@ const GestureTetris = () => {
                             }
                             state.isGrabbing = false;
                             state.activeId = null;
-                            document.getElementById('tetris-status').innerText = 'SCANNING';
+                            state.grabFrames = 0;
+                            state.releaseFrames = 0;
                         }
                     }
                 }
@@ -359,20 +358,18 @@ const GestureTetris = () => {
                 ctx.fill();
                 ctx.restore();
 
-                // Hand skeleton
+                // Hand skeleton & Landmarks
                 ctx.save();
                 ctx.translate(W, 0); ctx.scale(-1, 1);
-                const connColor = isThumbUp ? '#f43f5e' : isPeace ? '#a855f7' : state.isGrabbing ? '#facc15' : 'rgba(255,255,255,0.2)';
-                window.drawConnectors?.(ctx, landmarks, window.HAND_CONNECTIONS, { color: connColor, lineWidth: (isThumbUp || isPeace) ? 3 : 1 });
-                ctx.restore();
-
-                landmarks.forEach((p, i) => {
-                    const px = (1 - p.x) * W, py = p.y * H;
-                    ctx.beginPath();
-                    ctx.arc(px, py, (i === 4 || i === 8) ? 6 : 2, 0, Math.PI * 2);
-                    ctx.fillStyle = i === 4 ? '#f43f5e' : i === 8 ? '#4ade80' : '#fff';
-                    ctx.fill();
+                // Bold connectors
+                window.drawConnectors?.(ctx, landmarks, window.HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.6)', lineWidth: 5 });
+                // High-visibility 21 points
+                window.drawLandmarks?.(ctx, landmarks, {
+                    color: state.isGrabbing ? '#ffb400' : '#4ade80',
+                    lineWidth: 2,
+                    radius: (i) => (i === 4 || i === 8) ? 8 : 4
                 });
+                ctx.restore();
             }
         });
 
@@ -410,6 +407,20 @@ const GestureTetris = () => {
         setTimeout(() => el.remove(), 2000);
     };
 
+    useEffect(() => {
+        const handleResize = () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const ratio = isMobile
+                ? Math.max(width / 1280, height / 720)
+                : Math.min(width / 1280, height / 720);
+            setScale(ratio);
+        };
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     const totalPieces = engine.current.objects.length;
 
     return (
@@ -425,85 +436,82 @@ const GestureTetris = () => {
                 objectFit: 'cover', transform: 'scaleX(-1)', opacity: 0.8, zIndex: 0
             }} />
 
-            {/* Canvas — hand tracking + zone drawing */}
-            <canvas ref={canvasRef}
-                style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none' }}
-                width={1280} height={720} />
+            {/* Scaling Layer for Game Board */}
+            <div id="game-scaling-layer" style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: '1280px',
+                height: '720px',
+                transform: `translate(-50%, -50%) scale(${scale})`,
+                zIndex: 10,
+                pointerEvents: 'none'
+            }}>
+                {/* Canvas — hand tracking + zone drawing */}
+                <canvas ref={canvasRef}
+                    style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+                    width={1280} height={720} />
 
-            {/* Tetris Pieces Layer */}
-            <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
-                {engine.current.objects.map(shape => (
-                    <div
-                        key={shape.id}
-                        id={`tetris-shape-${shape.id}`}
-                        style={{
-                            position: 'absolute',
-                            transform: `translate(${shape.currentX}px, ${shape.currentY}px)`,
-                            pointerEvents: 'none',
-                            transition: 'filter 0.4s'
-                        }}
-                    >
-                        {shape.blocks.map(([bx, by], idx) => (
-                            <div key={idx} className="tetris-block" style={{
-                                position: 'absolute',
-                                width: GRID_SIZE - 2,
-                                height: GRID_SIZE - 2,
-                                left: bx * GRID_SIZE,
-                                top: by * GRID_SIZE,
-                                backgroundColor: shape.color,
-                                borderRadius: shape.type === 'O' ? '6px' : '8px',  // square = slightly less rounded for crisper look
-                                boxSizing: 'border-box',
-                                border: `2px solid ${shape.accent}`,
-                                boxShadow: `inset 4px 4px 0 rgba(255,255,255,0.4), inset -4px -4px 0 rgba(0,0,0,0.12)`,
-                            }} />
-                        ))}
+                {/* Tetris Pieces Layer */}
+                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                    {engine.current.objects.map((shape, idx) => {
+                        // Mobile: only show assembled pieces + current active piece
+                        if (isMobile && idx > currentIndex && !shape.assembled) return null;
 
-                        {/* Label badge */}
-                        <div style={{
-                            position: 'absolute',
-                            bottom: '-24px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            fontSize: '10px',
-                            fontWeight: 800,
-                            letterSpacing: '2px',
-                            color: shape.color,
-                            textShadow: `0 0 10px ${shape.color}`,
-                            whiteSpace: 'nowrap',
-                        }}>
-                            {shape.type === 'Corner' ? '▛ CORNER'
-                                : shape.type === 'Square+' ? '▰ SQUARE+'
-                                    : shape.type === 'C-Piece' ? '⊏ C-PIECE'
-                                        : shape.type === 'Stair' ? '▞ STAIR'
-                                            : '▟ L-LONG'}
-                        </div>
-                    </div>
-                ))}
+                        return (
+                            <div
+                                key={shape.id}
+                                id={`tetris-shape-${shape.id}`}
+                                style={{
+                                    position: 'absolute',
+                                    transform: `translate(${shape.currentX}px, ${shape.currentY}px)`,
+                                    pointerEvents: 'none',
+                                    transition: 'filter 0.4s',
+                                }}
+                            >
+                                {shape.blocks.map(([bx, by], bIdx) => (
+                                    <div key={bIdx} className="tetris-block" style={{
+                                        position: 'absolute',
+                                        width: GRID_SIZE - 2,
+                                        height: GRID_SIZE - 2,
+                                        left: bx * GRID_SIZE,
+                                        top: by * GRID_SIZE,
+                                        backgroundColor: shape.color,
+                                        borderRadius: shape.type === 'O' ? '6px' : '10px',
+                                        boxSizing: 'border-box',
+                                        border: `${isMobile ? 3 : 2}px solid ${shape.accent}`,
+                                        boxShadow: `inset 4px 4px 0 rgba(255,255,255,0.4), inset -4px -4px 0 rgba(0,0,0,0.15)`,
+                                    }} />
+                                ))}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
-            {/* HUD */}
+            {/* HUD (Simplified) */}
             <div style={{
                 position: 'absolute', top: '20px', left: '50%',
                 transform: 'translateX(-50%)',
-                background: 'rgba(255,255,255,0.05)',
+                background: 'rgba(255,255,255,0.9)',
                 backdropFilter: 'blur(14px)',
-                padding: '10px 32px',
+                padding: '8px 24px',
                 borderRadius: '50px',
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: 'white', zIndex: 100,
-                display: 'flex', gap: '24px', alignItems: 'center'
+                border: '1px solid rgba(0,0,0,0.1)',
+                color: '#000', zIndex: 100,
+                display: 'flex', gap: '16px', alignItems: 'center',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
             }}>
-                <span id="tetris-status" style={{ fontSize: '0.75rem', fontWeight: 900, letterSpacing: '4px' }}>SCANNING</span>
-                <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }} />
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '2px', color: '#facc15' }}>
-                    ASSEMBLED: {assembledCount}/{totalPieces}
+                <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1px' }}>
+                    ASSEMBLED: <span style={{ color: 'var(--primary)' }}>{assembledCount}/{totalPieces}</span>
                 </span>
             </div>
 
             {/* All-assembled trophy */}
             {assembledCount === totalPieces && (
-                <div className="all-assembled-banner">🏆 PUZZLE COMPLETE!</div>
+                <div className="all-assembled-banner">🏆 COMPLETE!</div>
             )}
+
 
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');

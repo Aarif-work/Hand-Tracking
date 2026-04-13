@@ -14,32 +14,34 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
             zIndex: 1
         }}>
             {/* Hero Section */}
-            <section className="animate-fade-in" style={{ textAlign: 'center', paddingTop: '4rem' }}>
+            <section className="animate-fade-in" style={{ textAlign: 'center', paddingTop: '2rem' }}>
                 <h1 className="gradient-text" style={{
-                    fontSize: '4.5rem',
+                    fontSize: '3.5rem',
                     fontWeight: 800,
-                    marginBottom: '1.5rem',
+                    marginBottom: '1rem',
                     lineHeight: 1.1,
-                    letterSpacing: '-2px'
+                    letterSpacing: '-1.5px'
                 }}>
-                    Motion Puzzle Studio
+                    Motion Puzzle
                 </h1>
                 <p style={{
-                    fontSize: '1.2rem',
+                    fontSize: '1.05rem',
                     color: 'var(--text-dim)',
-                    maxWidth: '600px',
-                    margin: '0 auto 3.5rem auto',
-                    lineHeight: 1.6,
+                    maxWidth: '450px',
+                    margin: '0 auto 2.5rem auto',
+                    lineHeight: 1.5,
                     fontWeight: 500
                 }}>
-                    Precision assembly at your fingertips. Grab the custom-engineered pieces and snap them into the master grid using natural hand gestures.
+                    A hands-free assembly experience.
                 </p>
 
-                <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
                     <button
                         onClick={onStartTetris}
                         style={{
-                            padding: '1.25rem 3.5rem',
+                            width: '100%',
+                            maxWidth: '280px',
+                            padding: '1.25rem',
                             fontSize: '1.1rem',
                             fontWeight: 700,
                             color: 'white',
@@ -47,46 +49,29 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
                             background: 'var(--primary)',
                             border: 'none',
                             borderRadius: '16px',
-                            boxShadow: '0 8px 0 #d94a4e',
-                            transition: 'all 0.1s',
-                            transform: 'translateY(0)'
-                        }}
-                        onMouseDown={(e) => {
-                            e.currentTarget.style.transform = 'translateY(4px)';
-                            e.currentTarget.style.boxShadow = '0 4px 0 #d94a4e';
-                        }}
-                        onMouseUp={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 8px 0 #d94a4e';
+                            boxShadow: '0 6px 0 #d94a4e',
+                            transition: 'all 0.1s'
                         }}
                     >
-                        Enter Studio
+                        Start Game
                     </button>
 
                     <button
                         onClick={onStartTracker}
                         style={{
-                            padding: '1.25rem 3.5rem',
-                            fontSize: '1.1rem',
-                            fontWeight: 700,
+                            width: '100%',
+                            maxWidth: '280px',
+                            padding: '1.1rem',
+                            fontSize: '1rem',
+                            fontWeight: 600,
                             color: 'var(--text)',
-                            cursor: 'pointer',
                             background: 'white',
-                            border: '2px solid #e2e8f0',
+                            border: '1.5px solid #e2e8f0',
                             borderRadius: '16px',
-                            transition: 'all 0.2s',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
-                        }}
-                        onMouseOver={(e) => {
-                            e.currentTarget.style.borderColor = 'var(--text)';
-                            e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.1)';
-                        }}
-                        onMouseOut={(e) => {
-                            e.currentTarget.style.borderColor = '#e2e8f0';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+                            cursor: 'pointer'
                         }}
                     >
-                        Direct Input Test
+                        Test Camera
                     </button>
                 </div>
             </section>
@@ -109,10 +94,10 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
                         <span style={{ color: 'var(--primary)' }}>👌</span> Assembly Directives
                     </h2>
                     <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <GestureItem icon="🤏" action="Pinch to Grab" description="Join thumb & index finger over a puzzle piece" />
-                        <GestureItem icon="🖱️" action="Drag & Position" description="Keep fingers pinched to move the object across the area" />
-                        <GestureItem icon="✋" action="Release & Snap" description="Open your fingers over the target zone to lock it in" />
-                        <GestureItem icon="✨" action="Puzzle Complete" description="Assemble all core pieces to finish the sequence" />
+                        <GestureItem icon="🤏" action="Pinch" description="Join thumb & index over piece" />
+                        <GestureItem icon="🖱️" action="Drag" description="Move hand while pinched" />
+                        <GestureItem icon="✋" action="Release" description="Open fingers to drop" />
+                        <GestureItem icon="✨" action="Win" description="Fill the grid to complete" />
                     </ul>
                 </div>
 
@@ -129,10 +114,10 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
                     <div style={{ color: 'var(--text-dim)', lineHeight: 1.8 }}>
                         <p style={{ marginBottom: '1.5rem', fontWeight: 500 }}>Operational environment standards:</p>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={stepStyle}><span>1</span> Distinct finger visibility</div>
-                            <div style={stepStyle}><span>2</span> Fluid hand movement ranges</div>
-                            <div style={stepStyle}><span>3</span> Optimal sensor proximity (1-2m)</div>
-                            <div style={stepStyle}><span>4</span> Real-time latency checks via Input Test</div>
+                            <div style={stepStyle}><span>1</span> Clear framing & light</div>
+                            <div style={stepStyle}><span>2</span> Static background</div>
+                            <div style={stepStyle}><span>3</span> 1-2m from camera</div>
+                            <div style={stepStyle}><span>4</span> Use Input Test to verify</div>
                         </div>
                     </div>
                 </div>
@@ -187,7 +172,7 @@ const GestureItem = ({ icon, action, description }) => (
     <li style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
         <span style={{ fontSize: '1.5rem' }}>{icon}</span>
         <div>
-            <div style={{ fontWeight: 700, color: 'white' }}>{action}</div>
+            <div style={{ fontWeight: 700, color: 'var(--text)' }}>{action}</div>
             <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)' }}>{description}</div>
         </div>
     </li>

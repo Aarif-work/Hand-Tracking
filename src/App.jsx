@@ -43,24 +43,24 @@ function App() {
       {view !== 'dashboard' && (
         <button
           onClick={() => setView('dashboard')}
-          className="animate-fade-in"
+          className="animate-fade-in responsive-home-btn"
           style={{
             position: 'fixed',
-            top: '30px',
-            left: '30px',
+            top: '20px',
+            left: '20px',
             zIndex: 3000,
-            padding: '0.75rem 1.5rem',
+            padding: '0.6rem 1.2rem',
             color: 'var(--text)',
             fontWeight: 700,
             cursor: 'pointer',
-            fontSize: '0.9rem',
+            fontSize: '0.85rem',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
             background: 'white',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
             border: '1px solid #e2e8f0',
-            borderRadius: '12px',
+            borderRadius: '10px',
             transition: 'all 0.2s'
           }}
           onMouseOver={(e) => {
@@ -72,7 +72,7 @@ function App() {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          <span>🏠</span> Back to Home
+          <span>🏠</span> <span className="home-btn-text">Back to Home</span>
         </button>
       )}
 
