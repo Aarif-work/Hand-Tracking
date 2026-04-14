@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { saveScore } from '../services/leaderboard';
 
 const GestureTetris = () => {
     const videoRef = useRef(null);
@@ -11,6 +12,10 @@ const GestureTetris = () => {
     const [gameComplete, setGameComplete] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
     const [elapsedTime, setElapsedTime] = useState(0);
+    const [playerName, setPlayerName] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [scoreSaved, setScoreSaved] = useState(false);
+    const [showSnackbar, setShowSnackbar] = useState(false);
     const startTimeRef = useRef(null);
     const timerRef = useRef(null);
 
@@ -23,7 +28,7 @@ const GestureTetris = () => {
     const GRAB_START = 0.08;
     const GRAB_END = 0.12;
     const FRAME_HOLD = 2;
-    const SMOOTHING = 0.8;
+    const SMOOTHING = 0.45; // Reduced smoothing for more "perfect" and responsive tracking
 
     // Zone anchor — centered horizontally: 640-150=490, vertically: 360-150=210
     const ZX = isMobile ? 490 : 920;
@@ -399,9 +404,12 @@ const GestureTetris = () => {
                 window.drawConnectors?.(ctx, landmarks, window.HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.6)', lineWidth: 5 });
                 // High-visibility 21 points
                 window.drawLandmarks?.(ctx, landmarks, {
-                    color: state.isGrabbing ? '#ffb400' : '#4ade80',
-                    lineWidth: 2,
-                    radius: (i) => (i === 4 || i === 8) ? 8 : 4
+                    color: state.isGrabbing ? '#fbbf24' : '#10b981',
+                    lineWidth: 1,
+                    radius: (i) => {
+                        if (i === 4 || i === 8) return state.isGrabbing ? 10 : 7;
+                        return 3;
+                    }
                 });
                 ctx.restore();
             }
@@ -445,9 +453,9 @@ const GestureTetris = () => {
         const handleResize = () => {
             const width = window.innerWidth;
             const height = window.innerHeight;
-            const ratio = isMobile
-                ? Math.max(width / 1280, height / 720)
-                : Math.min(width / 1280, height / 720);
+            // Always use Math.max to ensure the game "covers" the screen, providing a more immersive feel
+            // while keeping video and canvas perfectly synced.
+            const ratio = Math.max(width / 1280, height / 720);
             setScale(ratio);
         };
         handleResize();
@@ -466,8 +474,15 @@ const GestureTetris = () => {
         }}>
             {/* Camera feed */}
             <video ref={videoRef} style={{
-                position: 'absolute', width: '100%', height: '100%',
-                objectFit: 'cover', transform: 'scaleX(-1)', opacity: 0.8, zIndex: 0
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: '1280px',
+                height: '720px',
+                transform: `translate(-50%, -50%) scale(${scale}) scaleX(-1)`,
+                opacity: 0.8,
+                zIndex: 0,
+                objectFit: 'contain' // Changed to contain to match canvas scaling
             }} />
 
             {/* Scaling Layer for Game Board */}
@@ -582,15 +597,18 @@ const GestureTetris = () => {
                     {/* Popup Card */}
                     <div style={{
                         background: 'white',
-                        borderRadius: '28px',
-                        padding: '2.5rem 2rem',
+                        borderRadius: '32px',
+                        padding: '2rem',
                         textAlign: 'center',
-                        maxWidth: '340px',
+                        maxWidth: '420px', // Increased width to avoid "overload"
                         width: '90vw',
-                        boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
+                        boxShadow: '0 40px 100px rgba(0,0,0,0.5)',
                         position: 'relative',
                         animation: 'popIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275)',
-                        zIndex: 10001
+                        zIndex: 10001,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.5rem'
                     }}>
                         <div style={{ fontSize: '4rem', marginBottom: '0.5rem' }}>🏆</div>
                         <h2 style={{
@@ -628,25 +646,123 @@ const GestureTetris = () => {
                             </div>
                         </div>
 
+                        {/* Leaderboard Submission */}
+                        {!scoreSaved ? (
+                            <div style={{
+                                background: '#f8fafc',
+                                borderRadius: '20px',
+                                padding: '1rem',
+                                border: '1px solid #e2e8f0',
+                                marginBottom: '0.5rem',
+                                textAlign: 'left'
+                            }}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter name..."
+                                        value={playerName}
+                                        onChange={(e) => setPlayerName(e.target.value)}
+                                        maxLength={15}
+                                        style={{
+                                            flex: 1,
+                                            padding: '0.7rem 1rem',
+                                            borderRadius: '12px',
+                                            border: '2px solid #e2e8f0',
+                                            outline: 'none',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 600,
+                                            width: '100%'
+                                        }}
+                                    />
+                                    <button
+                                        disabled={!playerName.trim() || isSubmitting}
+                                        onClick={async () => {
+                                            if (!playerName.trim()) return;
+                                            setIsSubmitting(true);
+                                            const success = await saveScore(playerName, elapsedTime);
+                                            setIsSubmitting(false);
+                                            if (success) {
+                                                setScoreSaved(true);
+                                                setShowSnackbar(true);
+                                                setTimeout(() => setShowSnackbar(false), 4000);
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '0 1.25rem',
+                                            background: 'var(--text)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '12px',
+                                            fontWeight: 700,
+                                            cursor: (playerName.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
+                                            opacity: (playerName.trim() && !isSubmitting) ? 1 : 0.5,
+                                            fontSize: '0.85rem'
+                                        }}
+                                    >
+                                        {isSubmitting ? '...' : 'Save'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{
+                                background: '#10b981',
+                                borderRadius: '16px',
+                                padding: '0.85rem',
+                                color: 'white',
+                                fontWeight: 700,
+                                marginBottom: '0.5rem',
+                                fontSize: '0.9rem',
+                                animation: 'popIn 0.3s ease'
+                            }}>
+                                ✨ Score saved to Global Top 10!
+                            </div>
+                        )}
+
                         <button
                             onClick={() => window.location.reload()}
                             style={{
                                 width: '100%',
                                 padding: '1rem',
-                                background: 'linear-gradient(135deg, #ff5a5f, #f59e0b)',
-                                color: 'white',
-                                border: 'none',
+                                background: scoreSaved ? 'linear-gradient(135deg, #ff5a5f, #f59e0b)' : 'transparent',
+                                color: scoreSaved ? 'white' : '#64748b',
+                                border: scoreSaved ? 'none' : '2px solid #e2e8f0',
                                 borderRadius: '14px',
                                 fontSize: '1rem',
                                 fontWeight: 800,
                                 cursor: 'pointer',
                                 letterSpacing: '0.5px',
-                                boxShadow: '0 6px 20px rgba(255,90,95,0.4)'
+                                boxShadow: scoreSaved ? '0 6px 20px rgba(255,90,95,0.4)' : 'none',
+                                transition: 'all 0.2s'
                             }}
                         >
                             🔄 Play Again
                         </button>
                     </div>
+                </div>
+            )}
+
+            {/* Snackbar Notification */}
+            {showSnackbar && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '30px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: '#1e293b',
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                    zIndex: 11000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    animation: 'snackbarIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275)'
+                }}>
+                    <span style={{ fontSize: '1.2rem' }}>💎</span>
+                    Your score has been stored in Global Top 10!
                 </div>
             )}
 
@@ -674,6 +790,11 @@ const GestureTetris = () => {
                     0%   { transform: scale(0.5); opacity: 0; }
                     80%  { transform: scale(1.05); }
                     100% { transform: scale(1); opacity: 1; }
+                }
+
+                @keyframes snackbarIn {
+                    0%   { transform: translate(-50%, 100px); opacity: 0; }
+                    100% { transform: translate(-50%, 0); opacity: 1; }
                 }
 
                 .tetris-block::after {

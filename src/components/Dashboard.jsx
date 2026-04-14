@@ -1,4 +1,5 @@
 import React from 'react';
+import Leaderboard from './Leaderboard';
 
 const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
     return (
@@ -91,7 +92,7 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
                 </div>
             </section>
 
-            {/* Guide Section */}
+            {/* Guide & Leaderboard Section */}
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
@@ -116,27 +117,21 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
                     </ul>
                 </div>
 
+                {/* Leaderboard Integration */}
                 <div style={{
                     background: 'var(--surface)',
                     padding: '3rem',
                     borderRadius: '32px',
                     border: '1px solid #e2e8f0',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.02)'
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
                 }}>
-                    <h2 style={{ fontSize: '1.75rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ color: 'var(--secondary)' }}>🔧</span> Capture Protocol
-                    </h2>
-                    <div style={{ color: 'var(--text-dim)', lineHeight: 1.8 }}>
-                        <p style={{ marginBottom: '1.5rem', fontWeight: 500 }}>Operational environment standards:</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={stepStyle}><span>1</span> Clear framing & light</div>
-                            <div style={stepStyle}><span>2</span> Static background</div>
-                            <div style={stepStyle}><span>3</span> 1-2m from camera</div>
-                            <div style={stepStyle}><span>4</span> Use Input Test to verify</div>
-                        </div>
-                    </div>
+                    <Leaderboard />
                 </div>
             </div>
+
             {/* Footer with Privacy Link */}
             <footer style={{
                 marginTop: 'auto',
@@ -170,17 +165,6 @@ const Dashboard = ({ onStartTetris, onStartTracker, onShowPrivacy }) => {
 };
 
 
-const stepStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    background: 'white',
-    padding: '0.75rem 1.25rem',
-    borderRadius: '12px',
-    fontSize: '0.95rem',
-    border: '1px solid #e2e8f0',
-    color: 'var(--text)'
-};
 
 
 const GestureItem = ({ icon, action, description }) => (
